@@ -427,15 +427,6 @@ class RadLSS(object):
         print('Rank {}:  Calculated psf-local readnoise in {:.3f} mins.'.format(self.rank, (end_calcread - start_calcread) / 60.))
         
     def calc_skycontinuum(self):
-        # kernel_N      = 145
-        # sky_continuum = medfilt(skies['z'].flux[0, :], kernel_N)
-
-        # pl.plot(skies['z'].wave, sky_continuum)
-
-        # pl.xlabel('Wavelength [Angstroms]')
-        # pl.ylabel('Electrons per Angstrom')
-
-        # pl.title('Sky continuum ({}A median filter)'.format(kernel_N * 0.8))
         raise  NotImplementedError()
 
     def calc_fiberlosses(self):
@@ -1172,14 +1163,6 @@ class RadLSS(object):
           
             plt.close(fig)
           
-            # --------------- Redrock:  Template Ensemble  ---------------  
-            # pl.plot(self.ensemble_meta['REDSHIFT'], zbest['Z'], marker='.', lw=0.0)
-
-            # pl.plot(np.arange(0.7, 1.6, 0.1), np.arange(0.7, 1.6, 0.1), c='k', alpha=0.4)
-
-            # pl.xlabel('TRUE    REDSHIFT')
-            # pl.ylabel('REDROCK REDSHIFT')  
-              
             # --------------- Redrock:  Data  --------------- 
             Path(plots_dir + '/redrock/').mkdir(parents=True, exist_ok=True)
 
@@ -1279,9 +1262,7 @@ class RadLSS(object):
                 self.calc_nea()
              
                 self.calc_readnoise()
-                
-                # self.calc_skycontinuum()
-                
+                                
                 # self.calc_fiberlosses()
                 
                 # -------------  Deep Field  ---------------              
