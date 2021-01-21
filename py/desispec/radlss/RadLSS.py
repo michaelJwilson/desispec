@@ -1043,39 +1043,7 @@ class RadLSS(object):
         end_templatesnr = time.perf_counter()
                 
         print('Rank {}:  Solved for template snrs in {:.3f} mins.'.format(self.rank, (end_templatesnr - start_templatesnr) / 60.))
-                
-    def run_ensemble_redrock(self, output_dir='/global/scratch/mjwilson/', tracer='ELG'):
-        '''
-        Run redrock on the template ensemble to test tSNR vs rr dX2 dependence.
-        '''
-        for cam in self.cameras:        
-          band = cam[0]
-            
-          # TODO:  Add resolution, mask and sky noise to template flux for camera.  
-          spec = Spectra([cam], {cam: self.cframes[cam].wave}, {cam: self.ensemble_flux[tracer][band]}, {cam: self.cframes[cam].ivar[:self.nmodel]},\
-                         resolution_data={cam: self.cframes[cam].resolution_data[:self.nmodel,:,:]}, mask={cam: self.cframes[cam].mask[:self.nmodel]},\
-                         fibermap=self.cframes[cam].fibermap[:self.nmodel], meta=None, single=False)
-        
-        # Overwrites as default.
-        desispec.io.write_spectra(self.outdir + '/template-{}-ensemble-spectra.fits'.format(tracer.lower()), spec)
-        
-        # https://github.com/desihub/tutorials/blob/master/simulating-desi-spectra.ipynb
-        self.zbest_file = os.path.join(self.outdir, 'template-{}-ensemble-zbest.fits'.format(tracer.lower()))
-
-        # os.system('rm {}'.format(self.zbest_file))
-        
-        cmd     = 'rrdesi {} --zbest {}'.format(self.outdir + '/template-{}-ensemble-spectra.fits'.format(tracer.lower()), self.zbest_file)
-        # srun  = 'srun -A desi -N 1 -t 00:10:00 -C haswell --qos interactive'
-        # cmd   = '{} {} --mp 32'.format(srun, cmd)
-
-        print(cmd)
-        
-        os.system(cmd)
-
-        self.template_zbests = {}
-        
-        self.template_zbests[tracer] = Table.read(self.zbest_file, 'ZBEST')
-        
+                        
     def write_radweights(self, output_dir='/global/scratch/mjwilson/', vadd_fibermap=False):
         '''
         Each camera, each fiber, a template SNR (redshift efficiency) as a function of redshift &
