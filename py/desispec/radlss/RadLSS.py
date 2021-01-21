@@ -645,53 +645,6 @@ class RadLSS(object):
         end_rrcframe = time.perf_counter()
 
         print('Rank {}:  Calculated redrock cframe in {:.3f} mins.'.format(self.rank, (end_rrcframe - start_rrcframe) / 60.))
-
-    def ext_redrock_2Dframes(self, extract=False):
-        from specter.extract.ex2d import ex2d
-        
-        '''
-        Project best-fit redrock spectrum to 2D and reun extraction. 
-        '''
-
-        self.rr_2Dframes                      = {}
-        self.self.rr_2Dframe_spectroperf_ivar = {}
-            
-        for cam in self.cameras:
-            psf        = self.psfs[cam]
-
-            wave       = self.cframes[cam].wave
-            nwave      = len(wave)
-        
-            nspec      = len(self.rr_cframes[cam].flux)
-            
-            xyrange    = (xmin, xmax, ymin, ymax) = psf.xyrange((0, nspec), wave)
-            nx         = xmax - xmin
-            ny         = ymax - ymin
-        
-            influx     = self.rr_cframes[cam].flux
-        
-            #- Generate a noiseless truth image and a noisy image (Poisson + read noise)
-            # true_img   = psf.project(wave, influx*np.gradient(wave), xyrange=xyrange)
-
-            # read_noise = np.median(self.fibermaps[cam]['RDNOISE'])
-            # noisy_img  = np.random.poisson(true_img) + np.random.normal(scale=read_noise, size=true_img.shape)
-
-            # self.rr_2Dframes[cam] = noisy_img  
-        
-            #- Run extractions with true ivar and estimated ivar
-            # true_ivar     = 1.0 / (true_img + read_noise * read_noise)
-
-            if extract:
-                # IVAR by 'Spectro-Perfectionism'.
-                flux, ivar, R1 = ex2d(noisy_img, true_ivar, psf, 0, nspec, wave, xyrange=xyrange)
-
-                self.rr_2Dframe_spectroperf_ivar[cam] = ivar
-    
-                #- Resolution convolved influx -> model
-                # model       = np.zeros((nspec, nwave))
-
-                #  for i in range(nspec):
-                #    model[i] = Resolution(R1[i]).dot(influx[i])
     
     def gen_template_ensemble(self, tracer='ELG', nmodel=250, cached=True, sort=True):  
         '''
