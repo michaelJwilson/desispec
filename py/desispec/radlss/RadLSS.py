@@ -495,8 +495,7 @@ class RadLSS(object):
         '''
         Reconstruct best-fit redrock template from data ZBEST. 
         Use this to calculate sourceless IVAR & template SNR.
-
-        Calculates TSNR quantities?
+        Calculates TSNR aswell.
         '''
 
         start_rrcframe  = time.perf_counter()
