@@ -1283,15 +1283,6 @@ class RadLSS(object):
                 # self.calc_skycontinuum()
                 
                 # self.calc_fiberlosses()
-
-                # self.per_exp_redshifts()
-              
-                # self.rec_redrock_cframes()
-            
-                # self.ext_redrock_2Dframes()  
-
-                # for petal in np.arange(10).astype(str):
-                #    self.line_fit(petal=petal, plot=False)
                 
                 # -------------  Deep Field  ---------------              
                 # self.grab_deepfield_ensemble()
@@ -1300,8 +1291,6 @@ class RadLSS(object):
                 if templates:  
                     for tracer in tracers:  
                         self.calc_templatesnrs(tracer=tracer)
-
-                        # self.run_ensemble_redrock(tracer=tracer)
     
                         # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 
                         self.write_radweights()
