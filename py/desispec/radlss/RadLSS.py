@@ -438,61 +438,6 @@ class RadLSS(object):
         # pl.title('Sky continuum ({}A median filter)'.format(kernel_N * 0.8))
         raise  NotImplementedError()
 
-    def line_fit(self, petal='5', plot=False):
-        from cframe_postage    import cframe_postage
-
-        from postage_seriesfit import series_fit
-        from postage_seriesfit import plot_postages
-        
-        
-        start_linefit          = time.perf_counter()
-
-        # Construct cframes dict limited to this petal. 
-        self.petal_cframes     = {key: value for key, value in self.cframes.items() if key[1] == petal}
-
-        Path(self.qadir + '/line_fits/{}/'.format(petal)).mkdir(parents=True, exist_ok=True)
-
-        print('Writing to: {}/line_fits/{}.'.format(self.qadir, petal))
-        
-        zbests_fib             = self.zbests_fib[petal][self.zbests_fib[petal]['EXPID'] == self.expid]
-        
-        # Fiber order, i.e. row by row of cframe.flux.
-        for fiber in np.arange(len(zbests_fib)):
-            tid                = zbests_fib['TARGETID'][fiber]
-            fid                = zbests_fib['FIBER'][fiber]
-            
-            rrz                = self.zbests[petal]['Z'][self.zbests[petal]['TARGETID'] == tid][0]
-            rrzerr             = self.zbests[petal]['ZERR'][self.zbests[petal]['TARGETID'] == tid][0]
-            
-            self.postages, self.ipostages = cframe_postage(self.petal_cframes, fiber, rrz)
-
-            groups             = list(self.postages.keys())
-
-            mpostages          = {}
-
-            # Known problem with even wave range for Resolution() call.
-            try:
-                for group in groups:
-                    self.linefit_result, self.mpostages = series_fit(rrz, rrzerr, self.postages, group=group, mpostages=mpostages)
-
-                    print(tid, fid, rrz, rrzerr, group, self.linefit_result.success, self.linefit_result.status)
-                    
-                if plot & self.linefit_result.status >= 0:
-                    # print(self.linefit_result.x)
-                    
-                    self.linefit_fig = plot_postages(self.postages, self.mpostages, petal, fid, rrz, tid)
-                    self.linefit_fig.savefig(self.qadir + '/line_fits/{}/line-fit-{:d}.pdf'.format(petal, fid))
-
-                    # Close all figures (to suppress warning).                                                                                                                                                                               
-                    plt.close('all')
-                    
-            except:
-                print('Line fit failure for fiber {:d}.'.format(fiber))
-                
-        end_linefit = time.perf_counter()
-
-        print('Rank {}:  Calculated line fluxes for petal {} in {:.3f} mins.'.format(self.rank, petal, (end_linefit - start_linefit) / 60.))
-        
     def calc_fiberlosses(self):
         '''
         Calculate the fiberloss for each target of a given camera from the gfa psf and legacy morphtype.  Added to self.fibermaps[cam].
