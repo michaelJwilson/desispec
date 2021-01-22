@@ -93,7 +93,9 @@ class RadLSS(object):
         self.ensemble_meta    = {}
         self.ensemble_objmeta = {}
         self.template_snrs    = {}
-
+        
+        self.df_ensemble_zbests   = None
+        
         # Establish if cframes exist & science exposure, from header info.  
         self.get_data(shallow=True)
             
@@ -639,7 +641,7 @@ class RadLSS(object):
 
         print('Rank {}:  Calculated redrock cframe in {:.3f} mins.'.format(self.rank, (end_rrcframe - start_rrcframe) / 60.))
     
-    def gen_template_ensemble(self, tracer='ELG', nmodel=250, cached=True, sort=True):  
+    def gen_template_ensemble(self, tracer='ELG', nmodel=5000, cached=True, sort=True, conditioned=False):  
         '''
         Generate an ensemble of templates to sample tSNR for a range of points in
         (z, m, OII, etc.) space.
@@ -717,8 +719,27 @@ class RadLSS(object):
         wave                           = np.unique(wave) # sorted.
 
         ##  ---------------------  Sim  ---------------------
-        wave, flux, meta, objmeta      = tracer_maker(wave=wave, tracer=tracer, nmodel=nmodel)
+        if not conditioned:
+            wave, flux, meta, objmeta  = tracer_maker(wave=wave, tracer=tracer, nmodel=nmodel)
+            
+        else:
+            from desiutil.dust import mwdust_transmission
 
+            # Check we have deep field redshifts & fluxes. 
+            assert  (self.df_ensemble_zbests is not None)
+
+            # Extinction correction for flux. 
+            trans                      = mwdust_transmission(self.df_ensemble_allzbests['EBV'], 'R', self.df_ensemble_allzbests['PHOTSYS'])
+
+            conditional_rmags          = 22.5 - 2.5 * np.log10(meta['FLUX_R'] / trans)
+            conditional_zs             = self.df_ensemble_allzbests['Z']
+
+            nmodel                     = len(conditional_zs)
+            
+            wave, flux, meta, objmeta  = tracer_maker(wave=wave, tracer=tracer, nmodel=nmodel, redshifts=conditional_zs)
+
+            print('Rank {}:  Assuming conditional redshifts and magnitudes for ensemble.'.format(self.rank))
+            
         ##  No extinction correction.  
         meta['MAG_G']                  = 22.5 - 2.5 * np.log10(meta['FLUX_G'])
         meta['MAG_R']                  = 22.5 - 2.5 * np.log10(meta['FLUX_R'])
@@ -841,12 +862,14 @@ class RadLSS(object):
         self.df_ensemble_coadds        = {}
         self.df_ensemble_zbests        = {}
 
+        self.df_ensemble_allzbests     = Table()
+        
         self.ensemble_flux[tracer]     = {}
         self.ensemble_dflux[tracer]    = {}
 
         self.ensemble_meta[tracer]     = Table()
         self.ensemble_objmeta[tracer]  = Table()
-
+        
         keys = []
 
         for key in self.cframes.keys():
@@ -880,12 +903,13 @@ class RadLSS(object):
 
         self._df_vitable               = truth
 
-        df_tiles = {'BGS': '80613'}
+        df_tiles = {'BGS': ['80613', '80614', '80611', '80612', '80617']}
 
-        for petal in np.arange(10).astype(np.str):
+        for tileid in df_tiles[tracer]:
+          for petal in np.arange(10).astype(np.str):
             # E.g.  /global/cfs/cdirs/desi/spectro/redux/blanc/tiles/80613/deep/  
-            deepfield_coadd_file                                = os.path.join(self.prod, 'tiles', df_tiles[tracer], 'deep', 'coadd-{}-{}-{}.fits'.format(petal, df_tiles[tracer], 'deep'))
-            deepfield_zbest_file                                = os.path.join(self.prod, 'tiles', df_tiles[tracer], 'deep', 'zbest-{}-{}-{}.fits'.format(petal, df_tiles[tracer], 'deep'))
+            deepfield_coadd_file                                = os.path.join(self.prod, 'tiles', tileid, 'deep', 'coadd-{}-{}-{}.fits'.format(petal, tileid, 'deep'))
+            deepfield_zbest_file                                = os.path.join(self.prod, 'tiles', tileid, 'deep', 'zbest-{}-{}-{}.fits'.format(petal, tileid, 'deep'))
             
             self.df_ensemble_coadds[petal]                      = read_spectra(deepfield_coadd_file)
             self.df_ensemble_zbests[petal]                      = Table.read(deepfield_zbest_file, 'ZBEST')
@@ -901,26 +925,35 @@ class RadLSS(object):
             self.df_ensemble_zbests[petal]['IN_ENSEMBLE']       =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE']  & ( self.df_ensemble_zbests[petal]['DELTACHI2'] > dX2_lim)
             self.df_ensemble_zbests[petal]['IN_ENSEMBLE']       =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE']  & ( self.df_ensemble_zbests[petal]['Z'] > zlo) # Faux-stellar cut. 
             self.df_ensemble_zbests[petal]['IN_ENSEMBLE']       =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE']  & ((self.df_ensemble_zbests[petal]['SV1_BGS_TARGET']  & sv1_bgs_mask['BGS_FAINT']) != 0)
+
             '''
             # TARGETIDs not in the truth table have masked elements in array. 
             unmasked                                      = ~self.df_ensemble_zbests[petal]['BEST QUALITY'].mask
             
-            self.df_ensemble_zbests[petal]['IN_ENSEMBLE'][unmasked] =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE'][unmasked]  & (self.df_ensemble_zbests[petal]['BEST QUALITY'][unmasked] >= 2.5)
+            self.df_ensemble_zbests[petal]['IN_ENSEMBLE'][unmasked] =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE'][unmasked] & (self.df_ensemble_zbests[petal]['BEST QUALITY'][unmasked] >= 2.5)
             '''
+
             # Stack those making ensemble cut. 
-            self.ensemble_meta[tracer]                    = vstack((self.ensemble_meta[tracer],\
-                                                                    self.df_ensemble_zbests[petal]['TARGETID', 'FLUX_G', 'FLUX_R', 'FLUX_Z', 'Z', 'ZERR', 'DELTACHI2', 'NCOEFF', 'COEFF'][self.df_ensemble_zbests[petal]['IN_ENSEMBLE']]))
+            self.ensemble_meta[tracer] = vstack((self.ensemble_meta[tracer], self.df_ensemble_zbests[petal]['TARGETID', 'FLUX_G', 'FLUX_R', 'FLUX_Z', 'EBV', 'PHOTSYS', 'Z', 'ZERR', 'DELTACHI2', 'NCOEFF', 'COEFF'][self.df_ensemble_zbests[petal]['IN_ENSEMBLE']]))
             for key in keys:
-                band                                      = key[0]
+                band                                 = key[0]
 
                 if self.ensemble_flux[tracer][band] is None:
-                    self.ensemble_flux[tracer][band]      = self.df_ensemble_coadds[petal].flux[band][self.df_ensemble_zbests[petal]['IN_ENSEMBLE'], :]
+                    self.ensemble_flux[tracer][band] = self.df_ensemble_coadds[petal].flux[band][self.df_ensemble_zbests[petal]['IN_ENSEMBLE'], :]
 
                 else:
-                    self.ensemble_flux[tracer][band]      = np.vstack((self.ensemble_flux[tracer][band], self.df_ensemble_coadds[petal].flux[band][self.df_ensemble_zbests[petal]['IN_ENSEMBLE'],:]))
+                    self.ensemble_flux[tracer][band] = np.vstack((self.ensemble_flux[tracer][band], self.df_ensemble_coadds[petal].flux[band][self.df_ensemble_zbests[petal]['IN_ENSEMBLE'],:]))
 
             self.nmodel[tracer] += np.count_nonzero(self.df_ensemble_zbests[petal]['IN_ENSEMBLE'])
-    
+
+          # Compress across petals:
+          petals = list(self.df_ensemble_zbests.keys())
+        
+          for petal in petals:
+              self.df_ensemble_allzbests = vstack((self.df_ensemble_allzbests, self.df_ensemble_zbests[petal][self.df_ensemble_zbests[petal]['IN_ENSEMBLE']]))
+              
+              del self.df_ensemble_zbests[petal]
+            
         for band in ['b', 'r', 'z']:
             dflux = np.zeros_like(self.ensemble_flux[tracer][band])
 
@@ -940,7 +973,7 @@ class RadLSS(object):
         self.ensemble_meta[tracer]['REDSHIFT']    = self.ensemble_meta[tracer]['Z']
         self.ensemble_objmeta[tracer]['OIIFLUX']  = np.zeros(len(self.ensemble_meta[tracer]))
             
-        del  self.ensemble_meta[tracer]['Z']
+        del self.ensemble_meta[tracer]['Z']
         
         if sort:
             # Sort tracers for SOM-style plots.                                                                                                                                                                                            
@@ -980,12 +1013,11 @@ class RadLSS(object):
         '''
         for tracer in self.ensemble_tracers:
             for band in ['b', 'r', 'z']:
-                self.ensemble_flux[tracer][band]  = np.mean(self.ensemble_flux[tracer][band],  axis=0).reshape(1, len(self.ensemble_flux[tracer][band].T))
-                self.ensemble_dflux[tracer][band] = np.mean(self.ensemble_dflux[tracer][band], axis=0).reshape(1, len(self.ensemble_dflux[tracer][band].T))
+                self.ensemble_flux[tracer][band]  = np.sqrt(np.mean(self.ensemble_flux[tracer][band]**2.,  axis=0).reshape(1, len(self.ensemble_flux[tracer][band].T)))
+                self.ensemble_dflux[tracer][band] = np.sqrt(np.mean(self.ensemble_dflux[tracer][band]**2., axis=0).reshape(1, len(self.ensemble_dflux[tracer][band].T)))
                 self.ensemble_meta[tracer]        = None
 
             self.nmodel[tracer] = 1
-
 
         if vet:
             petals = list(self.df_ensemble_coadds.keys())
@@ -1296,12 +1328,13 @@ class RadLSS(object):
                 # -------------  Deep Field  ---------------
                 for tracer in tracers:
                     self.gen_df_ensemble(tracer=tracer)
+                    
+                    self.gen_template_ensemble(tracer=tracer, cached=False)
+                    
+                    self.calc_templatesnrs(tracer=tracer)
 
                 self.stack_ensemble()
                     
-                for tracer in tracers:
-                    self.calc_templatesnrs(tracer=tracer)
-    
                 # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 
                 self.write_radweights()
                     

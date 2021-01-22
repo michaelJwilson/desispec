@@ -59,7 +59,7 @@ def dtemplateSNR(dtemplate_flux, flux_ivar):
     
     # Work in calibrated flux units.
     # Assumes Poisson Variance from source is negligible.
-    return  np.sum(flux_ivar * dflux ** 2.)  
+    return  np.sum(flux_ivar * (dflux ** 2.))  
 
 # @jit
 def dtemplateSNR_modelivar(dtemplate_flux, sky_flux, flux_calib, fiberflat, readnoise, npix, angstroms_per_pixel):
