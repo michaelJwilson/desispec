@@ -97,7 +97,7 @@ def is_processed(logfile):
 # Night to reduce.
 night     = '20201223'
 tracers   = ['BGS']
-templates = True
+templates = False
 overwrite = True
 
 
@@ -151,7 +151,7 @@ if len(rankexp) > 0:
         
                 rads = RadLSS(night, expid, cameras=cameras, rank=rank, shallow=False, outdir=odir)
                 
-                rads.compute(templates=templates)
+                rads.compute(tracers=tracers)
                 
                 print('Rank {}:  SUCCESS.  Processed EXPID {:08d} in {:.3f} minutes.'.format(rank, expid, (time.perf_counter() - start) / 60.))
                 

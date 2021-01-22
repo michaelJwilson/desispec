@@ -8,8 +8,8 @@ import fitsio
 import itertools
 import warnings
 
-import numpy as np
-import pylab as pl
+import numpy                     as      np
+import pylab                     as      pl
 
 import desisim.templates
 import astropy.io.fits           as      fits
@@ -54,11 +54,11 @@ class RadLSS(object):
             prod: path to spec. pipeline reductions.
             shallow:
             odir: path to write to. 
-            aux: loading auxiliary data required for e.g. psf local rdnoise.  
+            aux: loading auxiliary data required for e.g. varying psf & psf local rdnoise.  
             rank: given rank, for logging.  
         """
                     
-        # E.g. $DESI_SPECTRO_CALIB:  /global/cfs/cdirs/desi/spectro/desi_spectro_calib/trunk.     
+        # E.g. export DESI_SPECTRO_CALIB=/global/cfs/cdirs/desi/spectro/desi_spectro_calib/trunk/.     
         # E.g. $DESI_MODEL:  global/common/software/desi/cori/desiconda/20200801-1.4.0-spec/code/desimodel/0.13.0.
         # E.g. $DESI_BASIS_TEMPLATES:  /global/scratch/mjwilson/desi-data.dm.noao.edu/desi/spectro/templates/basis_templates/v3.1/
 
@@ -78,6 +78,7 @@ class RadLSS(object):
             self.cameras      = cameras
 
         if self.aux:
+            # Time to retrieve aux. data, e.g. preprocs. 
             self.auxtime      = 0.0
             
         self.fail             = False
@@ -85,7 +86,7 @@ class RadLSS(object):
         
         self.templates        = {}
    
-        self.nmodel           =  0
+        self.nmodel           = {}
         self.ensemble_tracers = []
         self.ensemble_flux    = {}
         self.ensemble_dflux   = {} # Stored (F - ~F_100A) flux for the ensemble.
@@ -200,8 +201,6 @@ class RadLSS(object):
 
             self.flat_expid      = self.fiberflats[cam].header['EXPID']
         
-            # If fail:  CalibFinder([rads.cframes['b5'].meta, rads.cframes['b5'].meta])?
-    
             if self.aux:
                 start_getaux       = time.perf_counter()
 
@@ -491,11 +490,11 @@ class RadLSS(object):
 
         print('Rank {}:  Calculated per-fiber fiberloss in {:.3f} mins.'.format(self.rank, (end_calcfiberloss - start_calcfiberloss) / 60.))      
 
-    def rec_redrock_cframes(self):
+    def reconstruct_rr_cframes(self):
         '''
-        Reconstruct best-fit redrock template from data ZBEST. 
+        Reconstruct best-fit redrock template from data ZBEST.         
         Use this to calculate sourceless IVAR & template SNR.
-        Calculates TSNR aswell.
+        Calculates TSNR.
         '''
 
         start_rrcframe  = time.perf_counter()
@@ -515,7 +514,7 @@ class RadLSS(object):
         self.zbests_fib = {}
         
         for cam in self.cameras:
-            petal      = cam[1] 
+            petal       = cam[1] 
             
             # E.g. /global/scratch/mjwilson/desi-data.dm.noao.edu/desi/spectro/redux/andes/tiles/67230/20200314.
             self.zbest_path        = os.path.join(self.prod, 'tiles', str(self.tileid), str(self.night), 'zbest-{}-{}-{}.fits'.format(petal, self.tileid, self.night))
@@ -529,7 +528,7 @@ class RadLSS(object):
             # 
             self.zbests_fib[petal].sort('TARGETID')
 
-            # Sorting by zbest-style TARGETID to fibermap-style FIBER.                                                                                                                                                                     
+            # Sorting by zbest-style TARGETID to fibermap-style FIBER.                                                                                                                                                   
             indx       = np.argsort(self.zbests_fib[petal]['FIBER'].data)
             
             # Sorted by TARGETID. 
@@ -569,14 +568,18 @@ class RadLSS(object):
             # Sourceless-IVAR from redrock template fit to spectrum.
             rrsless_ivar  = np.zeros_like(self.cframes[cam].ivar)  
             
-            # **  Sky-subtracted ** realized flux. 
-            sless_ivar[self.cframes[cam].mask == 0]   = 1. / ((1. / self.cframes[cam].ivar[self.cframes[cam].mask == 0]) - self.cframes[cam].flux[self.cframes[cam].mask == 0] / self.fluxcalibs[cam].calib[self.cframes[cam].mask == 0] / self.fiberflats[cam].fiberflat[self.cframes[cam].mask == 0])
+            # **  Sky-subtracted ** realized flux.
+            sflux         = self.cframes[cam].flux[self.cframes[cam].mask == 0] / self.fluxcalibs[cam].calib[self.cframes[cam].mask == 0] / self.fiberflats[cam].fiberflat[self.cframes[cam].mask == 0]
+            sless_ivar[self.cframes[cam].mask == 0] = 1. / ((1. / self.cframes[cam].ivar[self.cframes[cam].mask == 0]) - sflux)
             
             # Best-fit redrock template to the flux.
-            rrsless_ivar[self.cframes[cam].mask == 0] = 1. / ((1. / self.cframes[cam].ivar[self.cframes[cam].mask == 0]) - txfluxs[self.cframes[cam].mask == 0] / self.fluxcalibs[cam].calib[self.cframes[cam].mask == 0] / self.fiberflats[cam].fiberflat[self.cframes[cam].mask == 0])
+            sflux         = txfluxs[self.cframes[cam].mask == 0] / self.fluxcalibs[cam].calib[self.cframes[cam].mask == 0] / self.fiberflats[cam].fiberflat[self.cframes[cam].mask == 0]
+            rrsless_ivar[self.cframes[cam].mask == 0] = 1. / ((1. / self.cframes[cam].ivar[self.cframes[cam].mask == 0]) - sflux)
                                         
             # https://github.com/desihub/desispec/blob/6c9810df3929b8518d49bad14356d35137d25a89/py/desispec/frame.py#L41  
-            self.rr_cframes[cam] = Frame(self.cframes[cam].wave, txfluxs, rrsless_ivar, mask=self.cframes[cam].mask, resolution_data=self.cframes[cam].resolution_data, fibermap=self.cframes[cam].fibermap, meta=self.cframes[cam].meta)
+            self.rr_cframes[cam] = Frame(self.cframes[cam].wave, txfluxs, rrsless_ivar, mask=self.cframes[cam].mask,\
+                                         resolution_data=self.cframes[cam].resolution_data, fibermap=self.cframes[cam].fibermap,\
+                                         meta=self.cframes[cam].meta)
 
             # Raw IVAR. 
             rr_tsnrs             = []
@@ -651,6 +654,9 @@ class RadLSS(object):
             elif tracer == 'LRG':
                 maker = desisim.templates.LRG(wave=wave)
 
+            elif tracer == 'BGS':
+                maker = desisim.templates.BGS(wave=wave)
+                
             else:
                 raise  ValueError('{} is not an available tracer.'.format(tracer))
 
@@ -677,19 +683,19 @@ class RadLSS(object):
             with open(self.ensemble_dir + '/template-{}-ensemble-objmeta.fits'.format(tracer.lower()), 'rb') as handle:
                 self.ensemble_objmeta = pickle.load(handle)                    
 
-            self.nmodel = len(self.ensemble_flux[tracer][self.cameras[0][0]])
+            self.nmodel[tracer] = len(self.ensemble_flux[tracer][self.cameras[0][0]])
 
-            if self.nmodel != nmodel:
+            if self.nmodel[tracer] != nmodel:
                 # Pass to below.
                 raise ValueError('Retrieved ensemble had erroneous model numbers.')
 
             self.ensemble_tracers.append(tracer)
             
-            print('Rank {}:  Successfully retrieved pre-written ensemble files at: {} (nmodel: {} == {}?)'.format(self.rank, self.ensemble_dir, nmodel, self.nmodel))
+            print('Rank {}:  Successfully retrieved pre-written ensemble files at: {} (nmodel: {} == {}?)'.format(self.rank, self.ensemble_dir, nmodel, self.nmodel[tracer]))
 
             end_genensemble = time.perf_counter()
 
-            print('Rank {}:  Template ensemble (nmodel: {}) in {:.3f} mins.'.format(self.rank, self.nmodel, (end_genensemble - start_genensemble) / 60.))
+            print('Rank {}:  Template ensemble (nmodel: {}) in {:.3f} mins.'.format(self.rank, self.nmodel[tracer], (end_genensemble - start_genensemble) / 60.))
 
             # Successfully retrieved.
             return  
@@ -721,7 +727,7 @@ class RadLSS(object):
         if tracer == 'ELG':
             meta['OIIFLUX']            = objmeta['OIIFLUX']
                 
-        self.nmodel                    = nmodel
+        self.nmodel[tracer]            = nmodel
                 
         self.ensemble_flux[tracer]     = {}
         self.ensemble_dflux[tracer]    = {}
@@ -779,28 +785,26 @@ class RadLSS(object):
 
         end_genensemble = time.perf_counter()
             
-        print('Rank {}:  Template ensemble (nmode; {}) in {:.3f} mins.'.format(self.rank, self.nmodel, (end_genensemble - start_genensemble) / 60.))
+        print('Rank {}:  Template ensemble (nmode; {}) in {:.3f} mins.'.format(self.rank, self.nmodel[tracer], (end_genensemble - start_genensemble) / 60.))
             
-    def grab_deepfield_ensemble(self, tracer='ELG', cached=False, sort=True, survey='SV1', tileid=67230):
+    def gen_df_ensemble(self, tracer='ELG', cached=False, sort=True, survey='SV1', dX2_lim=100., zlo=0.0013):
         import pandas              as     pd
 
         from   astropy.table       import vstack, join
         from   desispec.io.spectra import read_spectra
+        from   desitarget.sv1.sv1_targetmask import bgs_mask as sv1_bgs_mask
 
         
         start_deepfield                = time.perf_counter()
 
         self.ensemble_type             = survey
         
-        # https://desi.lbl.gov/trac/wiki/TargetSelectionWG/SV0                                                                                                                                                                             
-        deepfield_tileid               = str(tileid)
-        
         # https://desi.lbl.gov/trac/wiki/SurveyValidation/TruthTables.
         # Tile 67230 and night 20200315 (incomplete - 950/2932 targets).        
         vi_truthtable                  = '/global/cfs/cdirs/desi/sv/vi/TruthTables/truth_table_{}_v1.2.csv'.format(tracer)
 
-        self.nmodel                    =  0
-
+        self.nmodel[tracer]            =  0
+        
         self.df_ensemble_coadds        = {}
         self.df_ensemble_zbests        = {}
         
@@ -818,14 +822,14 @@ class RadLSS(object):
                 with open(self.ensemble_dir + '/deepfield-{}-ensemble-objmeta.fits'.format(tracer.lower()), 'rb') as handle:
                     self.ensemble_objmeta = pickle.load(handle)
 
-                self.nmodel               = len(self.ensemble_flux[tracer][self.cameras[0][0]])
+                self.nmodel[tracer] = len(self.ensemble_flux[tracer][self.cameras[0][0]])
                 self.ensemble_tracers.append(tracer)
 
-                print('Rank {}:  Successfully retrieved pre-written ensemble files at: {} (nmodel: {})'.format(self.rank, self.ensemble_dir, self.nmodel))
+                print('Rank {}:  Successfully retrieved pre-written ensemble files at: {} (nmodel: {})'.format(self.rank, self.ensemble_dir, self.nmodel[tracer]))
 
                 end_deepfield = time.perf_counter()
 
-                print('Rank {}:  Grabbed deepfield ensemble (nmodel: {}) in {:.3f} mins.'.format(self.rank, self.nmodel, (end_deepfield - start_deepfield) / 60.))
+                print('Rank {}:  Grabbed deepfield ensemble (nmodel: {}) in {:.3f} mins.'.format(self.rank, self.nmodel[tracer], (end_deepfield - start_deepfield) / 60.))
 
                 return
 
@@ -876,34 +880,36 @@ class RadLSS(object):
 
         self._df_vitable               = truth
 
+        df_tiles = {'BGS': '80613'}
+
         for petal in np.arange(10).astype(np.str):
-            # E.g. /global/scratch/mjwilson/desi-data.dm.noao.edu/desi/spectro/redux/andes/tiles/67230/20200314                                                                                                                             
-            deepfield_zbest_file                          = os.path.join(self.prod, 'tiles', deepfield_tileid, str(self.night), 'zbest-{}-{}-{}.fits'.format(petal, deepfield_tileid, self.night))
-            deepfield_coadd_file                          = os.path.join(self.prod, 'tiles', deepfield_tileid, str(self.night), 'coadd-{}-{}-{}.fits'.format(petal, deepfield_tileid, self.night))
-
-            self.df_ensemble_coadds[petal]                = read_spectra(deepfield_coadd_file)
-
-            # BUG: Ordering problem?
-            self.df_ensemble_zbests[petal]                = Table.read(deepfield_zbest_file, 'ZBEST')
-
-            # BUG: Ordering problem?
-            self.df_ensemble_zbests[petal]['FLUX_G']      = self.df_ensemble_coadds[petal].fibermap['FLUX_G']
-            self.df_ensemble_zbests[petal]['FLUX_R']      = self.df_ensemble_coadds[petal].fibermap['FLUX_R']
-            self.df_ensemble_zbests[petal]['FLUX_Z']      = self.df_ensemble_coadds[petal].fibermap['FLUX_Z']
-
-            self.df_ensemble_zbests[petal]                = join(self.df_ensemble_zbests[petal], truth['TARGETID', 'BEST QUALITY'], join_type='left', keys='TARGETID')
+            # E.g.  /global/cfs/cdirs/desi/spectro/redux/blanc/tiles/80613/deep/  
+            deepfield_coadd_file                                = os.path.join(self.prod, 'tiles', df_tiles[tracer], 'deep', 'coadd-{}-{}-{}.fits'.format(petal, df_tiles[tracer], 'deep'))
+            deepfield_zbest_file                                = os.path.join(self.prod, 'tiles', df_tiles[tracer], 'deep', 'zbest-{}-{}-{}.fits'.format(petal, df_tiles[tracer], 'deep'))
             
-            self.df_ensemble_zbests[petal]['IN_ENSEMBLE'] = (self.df_ensemble_zbests[petal]['ZWARN'] == 0) & (self.df_ensemble_coadds[petal].fibermap['FIBERSTATUS'] == 0)
-            self.df_ensemble_zbests[petal]['IN_ENSEMBLE'] =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE']  & (self.df_ensemble_zbests[petal]['DELTACHI2'] > 80.)
+            self.df_ensemble_coadds[petal]                      = read_spectra(deepfield_coadd_file)
+            self.df_ensemble_zbests[petal]                      = Table.read(deepfield_zbest_file, 'ZBEST')
 
+            # fibermaps                                         = Table.read(deepfield_zbest_file, 'FIBERMAP')
+            
+            assert  np.all(self.df_ensemble_zbests[petal]['TARGETID'] == self.df_ensemble_coadds[petal].fibermap['TARGETID'])
+            
+            self.df_ensemble_zbests[petal]                      = join(self.df_ensemble_zbests[petal], self.df_ensemble_coadds[petal].fibermap, join_type='left', keys='TARGETID')
+            self.df_ensemble_zbests[petal]                      = join(self.df_ensemble_zbests[petal], truth['TARGETID', 'BEST QUALITY'], join_type='left', keys='TARGETID')
+            
+            self.df_ensemble_zbests[petal]['IN_ENSEMBLE']       = (self.df_ensemble_zbests[petal]['ZWARN'] == 0)  & ( self.df_ensemble_zbests[petal]['FIBERSTATUS'] == 0)
+            self.df_ensemble_zbests[petal]['IN_ENSEMBLE']       =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE']  & ( self.df_ensemble_zbests[petal]['DELTACHI2'] > dX2_lim)
+            self.df_ensemble_zbests[petal]['IN_ENSEMBLE']       =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE']  & ( self.df_ensemble_zbests[petal]['Z'] > zlo) # Faux-stellar cut. 
+            self.df_ensemble_zbests[petal]['IN_ENSEMBLE']       =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE']  & ((self.df_ensemble_zbests[petal]['SV1_BGS_TARGET']  & sv1_bgs_mask['BGS_FAINT']) != 0)
+            '''
             # TARGETIDs not in the truth table have masked elements in array. 
             unmasked                                      = ~self.df_ensemble_zbests[petal]['BEST QUALITY'].mask
             
             self.df_ensemble_zbests[petal]['IN_ENSEMBLE'][unmasked] =  self.df_ensemble_zbests[petal]['IN_ENSEMBLE'][unmasked]  & (self.df_ensemble_zbests[petal]['BEST QUALITY'][unmasked] >= 2.5)
-            
+            '''
+            # Stack those making ensemble cut. 
             self.ensemble_meta[tracer]                    = vstack((self.ensemble_meta[tracer],\
                                                                     self.df_ensemble_zbests[petal]['TARGETID', 'FLUX_G', 'FLUX_R', 'FLUX_Z', 'Z', 'ZERR', 'DELTACHI2', 'NCOEFF', 'COEFF'][self.df_ensemble_zbests[petal]['IN_ENSEMBLE']]))
-
             for key in keys:
                 band                                      = key[0]
 
@@ -913,8 +919,8 @@ class RadLSS(object):
                 else:
                     self.ensemble_flux[tracer][band]      = np.vstack((self.ensemble_flux[tracer][band], self.df_ensemble_coadds[petal].flux[band][self.df_ensemble_zbests[petal]['IN_ENSEMBLE'],:]))
 
-            self.nmodel += np.count_nonzero(self.df_ensemble_zbests[petal]['IN_ENSEMBLE'])
-
+            self.nmodel[tracer] += np.count_nonzero(self.df_ensemble_zbests[petal]['IN_ENSEMBLE'])
+    
         for band in ['b', 'r', 'z']:
             dflux = np.zeros_like(self.ensemble_flux[tracer][band])
 
@@ -924,27 +930,28 @@ class RadLSS(object):
                 sflux      = convolve(ff, Box1DKernel(125), boundary='extend')
                 dflux[i,:] = ff - sflux
 
-            self.ensemble_dflux[tracer][band] = dflux
+            self.ensemble_dflux[tracer][band]     = dflux
 
+        # TO DO: MW Transmission correction. 
         self.ensemble_meta[tracer]['MAG_G']       = 22.5 - 2.5 * np.log10(self.ensemble_meta[tracer]['FLUX_G'])
         self.ensemble_meta[tracer]['MAG_R']       = 22.5 - 2.5 * np.log10(self.ensemble_meta[tracer]['FLUX_R'])
         self.ensemble_meta[tracer]['MAG_Z']       = 22.5 - 2.5 * np.log10(self.ensemble_meta[tracer]['FLUX_Z'])
 
         self.ensemble_meta[tracer]['REDSHIFT']    = self.ensemble_meta[tracer]['Z']
-        
-        ##  HACK:
         self.ensemble_objmeta[tracer]['OIIFLUX']  = np.zeros(len(self.ensemble_meta[tracer]))
             
-        if sort and (tracer == 'ELG'):
+        del  self.ensemble_meta[tracer]['Z']
+        
+        if sort:
             # Sort tracers for SOM-style plots.                                                                                                                                                                                            
-            indx                                  = np.argsort(self.ensemble_meta[tracer], order=['Z'])
+            indx                                  = np.argsort(self.ensemble_meta[tracer], order=['REDSHIFT'])
 
             self.ensemble_meta[tracer]            = self.ensemble_meta[tracer][indx]
             self.ensemble_objmeta[tracer]         = self.ensemble_objmeta[tracer][indx]
 
             for band in ['b', 'r', 'z']:
                 self.ensemble_flux[tracer][band]  = self.ensemble_flux[tracer][band][indx]
-                # self.ensemble_dflux[tracer][band] = self.ensemble_dflux[tracer][band][indx]                
+                self.ensemble_dflux[tracer][band] = self.ensemble_dflux[tracer][band][indx]                
          
         with open(self.ensemble_dir + '/deepfield-{}-ensemble-flux.fits'.format(tracer.lower()), 'wb') as handle:
             pickle.dump(self.ensemble_flux, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -958,13 +965,36 @@ class RadLSS(object):
         with open(self.ensemble_dir + '/deepfield-{}-ensemble-objmeta.fits'.format(tracer.lower()), 'wb') as handle:
             pickle.dump(self.ensemble_objmeta, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-        # List of tracers computed.                                                                                                                                                                                                          
+        # List of tracers computed.                                                                                                                                                                                                        
         if tracer not in self.ensemble_tracers:
             self.ensemble_tracers.append(tracer)
 
         end_deepfield = time.perf_counter()
 
-        print('Rank {}:  Deepfield ensemble (nmodel: {}) in {:.3f} mins.'.format(self.rank, self.nmodel, (end_deepfield - start_deepfield) / 60.))
+        print('Rank {}:  Writing to {}.'.format(self.rank, self.ensemble_dir + '/deepfield-{}-ensemble-flux.fits'.format(tracer.lower())))        
+        print('Rank {}:  Created deepfield ensemble of {} galaxies in {:.3f} mins.'.format(self.rank, self.nmodel[tracer], (end_deepfield - start_deepfield) / 60.))
+
+    def stack_ensemble(self, vet=True):
+        '''
+        Stack the ensemble to an average.
+        '''
+        for tracer in self.ensemble_tracers:
+            for band in ['b', 'r', 'z']:
+                self.ensemble_flux[tracer][band]  = np.mean(self.ensemble_flux[tracer][band],  axis=0).reshape(1, len(self.ensemble_flux[tracer][band].T))
+                self.ensemble_dflux[tracer][band] = np.mean(self.ensemble_dflux[tracer][band], axis=0).reshape(1, len(self.ensemble_dflux[tracer][band].T))
+                self.ensemble_meta[tracer]        = None
+
+            self.nmodel[tracer] = 1
+
+
+        if vet:
+            petals = list(self.df_ensemble_coadds[petal].keys())
+            petal  = petals[0]
+
+            for band in ['b', 'r', 'z']:
+                pl.plot(self.df_ensemble_coadds[petal].wave[band], self.ensemble_dflux[tracer][band].T)
+                        
+            pl.show()
             
     def calc_templatesnrs(self, tracer='ELG'):
         '''
@@ -989,15 +1019,14 @@ class RadLSS(object):
             band                    = cam[0]
             
             nfiber                  = len(self.fibermaps[cam]['FIBER'])
-            nmodel                  = len(self.ensemble_meta[tracer])
                 
             self.template_snrs[tracer][cam]                   = {} 
 
             # Uses cframe IVAR. 
-            self.template_snrs[tracer][cam]['TSNR']           = np.zeros((nfiber, nmodel)) 
+            self.template_snrs[tracer][cam]['TSNR']           = np.zeros((nfiber, self.nmodel[tracer])) 
 
             # Uses CCD-equation based on model, calculate npix, rdnoise, etc. 
-            self.template_snrs[tracer][cam]['TSNR_MODELIVAR'] = np.zeros((nfiber, nmodel)) 
+            self.template_snrs[tracer][cam]['TSNR_MODELIVAR'] = np.zeros((nfiber, self.nmodel[tracer])) 
             
             for ifiber, fiberid in enumerate(self.fibermaps[cam]['FIBER']):
                 for j, template_dflux in enumerate(self.ensemble_dflux[tracer][band]):
@@ -1231,9 +1260,9 @@ class RadLSS(object):
 
                     axes[0].imshow(np.log10(self.template_snrs[tracer]['brz{}'.format(petal)]['TSNR']), aspect='auto')  
          
-                    axes[1].imshow(np.broadcast_to(self.ensemble_meta[tracer]['REDSHIFT'],   (500, self.nmodel)), aspect='auto')
-                    axes[2].imshow(np.broadcast_to(self.ensemble_meta[tracer]['MAG_G'],      (500, self.nmodel)), aspect='auto')    
-                    axes[3].imshow(np.broadcast_to(self.ensemble_objmeta[tracer]['OIIFLUX'], (500, self.nmodel)), aspect='auto')  
+                    axes[1].imshow(np.broadcast_to(self.ensemble_meta[tracer]['REDSHIFT'],   (500, self.nmodel[tracer])), aspect='auto')
+                    axes[2].imshow(np.broadcast_to(self.ensemble_meta[tracer]['MAG_G'],      (500, self.nmodel[tracer])), aspect='auto')    
+                    axes[3].imshow(np.broadcast_to(self.ensemble_objmeta[tracer]['OIIFLUX'], (500, self.nmodel[tracer])), aspect='auto')  
 
                     axes[0].set_title('$\log_{10}$TSNR')
                     axes[1].set_title('REDSHIFT')
@@ -1254,7 +1283,7 @@ class RadLSS(object):
 
             print('Rank {}:  Created QA plots ({}) in {:.3f} mins.'.format(self.rank, plots_dir, (end_plotqa - start_plotqa) / 60.))
         
-    def compute(self, templates=True, tracers=['ELG']):
+    def compute(self, tracers=['ELG']):
         #  Process only science exposures.
         if self.flavor == 'science':        
             if (not self.fail):
@@ -1264,19 +1293,20 @@ class RadLSS(object):
                                 
                 # self.calc_fiberlosses()
                 
-                # -------------  Deep Field  ---------------              
-                # self.grab_deepfield_ensemble()
-              
-                # -------------  Templates  --------------- 
-                if templates:  
-                    for tracer in tracers:  
-                        self.calc_templatesnrs(tracer=tracer)
-    
-                        # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 
-                        self.write_radweights()
+                # -------------  Deep Field  ---------------
+                for tracer in tracers:
+                    self.gen_df_ensemble(tracer=tracer)
+
+                self.stack_ensemble()
                     
-                        # -------------  QA  -------------            
-                        # self.qa_plots()
+                for tracer in tracers:
+                    self.calc_templatesnrs(tracer=tracer)
+    
+                # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 
+                self.write_radweights()
+                    
+                # -------------  QA  -------------            
+                # self.qa_plots()
               
                 # except:
                 # print('Failed to compute for expid {} and cameras {}'.format(expid, self.cameras))
