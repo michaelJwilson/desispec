@@ -988,7 +988,7 @@ class RadLSS(object):
 
 
         if vet:
-            petals = list(self.df_ensemble_coadds[petal].keys())
+            petals = list(self.df_ensemble_coadds.keys())
             petal  = petals[0]
 
             for band in ['b', 'r', 'z']:
