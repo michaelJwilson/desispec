@@ -96,8 +96,11 @@ def is_processed(logfile):
 
 # Night to reduce.
 night     = '20201223'
+
+# Tracers to sample fiber variance. 
 tracers   = ['BGS']
-templates = False
+
+#
 overwrite = True
 
 
@@ -107,8 +110,10 @@ expids, tiles = get_expids(night)
 # Test set. 
 expids    = [69611]
 
-# One petal test set, e.g. ['b6', 'r6', 'z6'] or full: cameras=None. 
-cameras   = ['b6', 'r6', 'z6']
+# One petal test set, e.g. ['b6', 'r6', 'z6'] or full: cameras=None.  
+# cameras = ['b6', 'r6', 'z6']
+
+cameras   = None
 
 comm.barrier()
 

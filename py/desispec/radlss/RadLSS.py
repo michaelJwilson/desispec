@@ -58,7 +58,8 @@ class RadLSS(object):
             rank: given rank, for logging.  
         """
                     
-        # E.g. export DESI_SPECTRO_CALIB=/global/cfs/cdirs/desi/spectro/desi_spectro_calib/trunk/.     
+        # E.g. export DESI_SPECTRO_CALIB=/global/cfs/cdirs/desi/spectro/desi_spectro_calib/trunk/.
+        #
         # E.g. $DESI_MODEL:  global/common/software/desi/cori/desiconda/20200801-1.4.0-spec/code/desimodel/0.13.0.
         # E.g. $DESI_BASIS_TEMPLATES:  /global/scratch/mjwilson/desi-data.dm.noao.edu/desi/spectro/templates/basis_templates/v3.1/
 
@@ -112,7 +113,8 @@ class RadLSS(object):
 
             # Caches spectra matched gfas to file. 
             self.get_gfas()
-            
+
+            # TO DO: Get GFA estimated depths for Anand's SV1 exposures.             
             try:
                 self.get_data(shallow=False)
 
@@ -125,7 +127,7 @@ class RadLSS(object):
         else:
             self.fail = True
 
-            print('{:08d}:  Non-science exposure'.format(expid))  
+            print('{:08d}:  Non-science ({}) exposure.'.format(expid, self.flavor))  
         
     def get_data(self, shallow=False):    
         '''
@@ -193,7 +195,7 @@ class RadLSS(object):
                 del self.cframes[cam]
                 continue
 
-            print('Rank {}:  Grabbing camera {}'.format(self.rank, cam))
+            print('Rank {}:  Grabbing camera {}.'.format(self.rank, cam))
                                             
             self.skies[cam]      = read_sky(findfile('sky', night=self.night, expid=self.expid, camera=cam, specprod_dir=self.prod))
         
@@ -284,7 +286,11 @@ class RadLSS(object):
             psf_wave:  wavelength at which to evaluate the PSF, e.g. 3727. * (1. + 1.1) 
 
         Result:
-            
+            populates instance.fibermaps with NEA and ANGSTROMPERPIXEL.
+
+        Approx:
+            if approx, nea= , angstromperpix= 
+
         '''
 
         start_calcnea = time.perf_counter()
@@ -311,7 +317,7 @@ class RadLSS(object):
             #  Range that boxes in fiber 'trace':  (xmin, xmax, ymin, ymax)
             #  ranges = psf.xyrange(fiberids, self.psf_wave)
             
-            #  Note:  Expectation of 3.44 for PSF size in pixel units (spectro paper).
+            #  Note:  Expectation of ** 3.44 ** for PSF size in pixel units (spectro paper).
             #  Return Gaussian sigma of PSF spot in cross-dispersion direction in CCD pixel units.
             #  Gaussian PSF, radius R that maximizes S/N for a faint source in the sky-limited case is 1.7σ
             #  http://www.ucolick.org/~bolte/AY257/s_n.pdf
@@ -354,7 +360,14 @@ class RadLSS(object):
         Requires pre_procs prod. loading by aux=True in class initialization. 
 
         Input:
-          psf_wave:  wavelength at which to evaluate the PSF, e.g. 3727. * (1. + 1.1) 
+          psf_wave:  wavelength at which to evaluate the PSF, e.g. 3727. * (1. + 1.1).
+
+        Result:
+          populates instance.fibermap with ccdx, ccdy, rdnoise, quad, rdnoise_quad.
+
+        Questions:
+          can get readnoise from cframes if quadrant of each fiber known (ccdx, ccdy) without psf?
+          
         '''
         
         self.ccdsizes          = {}   
@@ -363,9 +376,7 @@ class RadLSS(object):
         
         for cam in self.cameras:
             self.ccdsizes[cam] = np.array(self.cframes[cam].meta['CCDSIZE'].split(',')).astype(np.int)
-                            
-            psf                = self.psfs[cam]
-                        
+                                                    
             if psf_wave is None:
                 #  Representative wavelength.
                 z_elg      = 1.1
@@ -396,8 +407,11 @@ class RadLSS(object):
                         return  'B'
                     else:
                         return  'D'
-                        
-            for ifiber, fiberid in enumerate(fiberids):                
+
+            psf = self.psfs[cam]
+                    
+            for ifiber, fiberid in enumerate(fiberids):
+                #  TODO:  CCD X,Y not otherwise available?  E.g. in header.  
                 x, y                     = psf.xy(ifiber, psf_wave)
         
                 ccd_quad                 = quadrant(x, y)
@@ -411,7 +425,9 @@ class RadLSS(object):
         
                 ccd_x.append(x)
                 ccd_y.append(y)        
+
                 quads.append(ccd_quad)
+
                 rd_quad_noises.append(self.cframes[cam].meta['OBSRDN{}'.format(ccd_quad)])
                         
             self.fibermaps[cam]['CCDX']         = np.array(ccd_x)
@@ -495,8 +511,7 @@ class RadLSS(object):
     def reconstruct_rr_cframes(self):
         '''
         Reconstruct best-fit redrock template from data ZBEST.         
-        Use this to calculate sourceless IVAR & template SNR.
-        Calculates TSNR.
+        Use this to calculate sourceless IVAR & resulting TSNR.
         '''
 
         start_rrcframe  = time.perf_counter()
@@ -641,12 +656,16 @@ class RadLSS(object):
 
         print('Rank {}:  Calculated redrock cframe in {:.3f} mins.'.format(self.rank, (end_rrcframe - start_rrcframe) / 60.))
     
-    def gen_template_ensemble(self, tracer='ELG', nmodel=5000, cached=True, sort=True, conditioned=False):  
+    def gen_template_ensemble(self, tracer='ELG', nmodel=500, cached=True, sort=True, conditioned=False):  
         '''
         Generate an ensemble of templates to sample tSNR for a range of points in
         (z, m, OII, etc.) space.
+
+        Uses cache on disk if possible, otherwise writes it. 
+
+        If conditioned, uses deepfield redshifts and (currently r) magnitudes to condition simulated templates.
         '''
-        def tracer_maker(wave, tracer=tracer, nmodel=nmodel):
+        def tracer_maker(wave, tracer=tracer, nmodel=nmodel, redshifts=None, mags=None):
             if tracer == 'ELG':
                 maker = desisim.templates.ELG(wave=wave)
 
@@ -662,7 +681,7 @@ class RadLSS(object):
             else:
                 raise  ValueError('{} is not an available tracer.'.format(tracer))
 
-            flux, wave, meta, objmeta = maker.make_templates(nmodel=nmodel)
+            flux, wave, meta, objmeta = maker.make_templates(nmodel=nmodel, trans_filter='decam2014-r', redshift=redshifts, mag=mags, south=True)
 
             return  wave, flux, meta, objmeta
 
@@ -670,7 +689,9 @@ class RadLSS(object):
         start_genensemble  = time.perf_counter()
 
         self.ensemble_type = 'DESISIM'
-        
+
+        # If already available, load.
+        # TODO:  Simplify to one fits with headers?
         if cached and path.exists(self.ensemble_dir + '/template-{}-ensemble-flux.fits'.format(tracer.lower())):
           try:
             with open(self.ensemble_dir + '/template-{}-ensemble-flux.fits'.format(tracer.lower()), 'rb') as handle:
@@ -723,20 +744,26 @@ class RadLSS(object):
             wave, flux, meta, objmeta  = tracer_maker(wave=wave, tracer=tracer, nmodel=nmodel)
             
         else:
+            # Condition simulated spectra on deepfield redshifts and magnitudes. 
             from desiutil.dust import mwdust_transmission
 
+            
             # Check we have deep field redshifts & fluxes. 
             assert  (self.df_ensemble_zbests is not None)
 
-            # Extinction correction for flux. 
+            # Extinction correction for flux, band 'G', 'R', or 'Z'.
             trans                      = mwdust_transmission(self.df_ensemble_allzbests['EBV'], 'R', self.df_ensemble_allzbests['PHOTSYS'])
 
+            # Use deep field ensemble redshifts and magnitudes to condition desisim template call.
+            #
+            # TOD:  Defaults to r magnitude.  Vary by tracer?
+            #
             conditional_rmags          = 22.5 - 2.5 * np.log10(meta['FLUX_R'] / trans)
             conditional_zs             = self.df_ensemble_allzbests['Z']
 
             nmodel                     = len(conditional_zs)
             
-            wave, flux, meta, objmeta  = tracer_maker(wave=wave, tracer=tracer, nmodel=nmodel, redshifts=conditional_zs)
+            wave, flux, meta, objmeta  = tracer_maker(wave=wave, tracer=tracer, nmodel=nmodel, redshifts=conditional_zs, mags=conditional_rmags)
 
             print('Rank {}:  Assuming conditional redshifts and magnitudes for ensemble.'.format(self.rank))
             
@@ -755,7 +782,7 @@ class RadLSS(object):
         self.ensemble_meta[tracer]     = meta
         self.ensemble_objmeta[tracer]  = objmeta
 
-        # Generate template fluxes for brz bands. 
+        # Generate template (d)fluxes for brz bands. 
         for band in ['b', 'r', 'z']:
             band_key                          = [x[0] == band for x in keys]
             band_key                          = keys[band_key][0]
@@ -809,10 +836,10 @@ class RadLSS(object):
         print('Rank {}:  Template ensemble (nmode; {}) in {:.3f} mins.'.format(self.rank, self.nmodel[tracer], (end_genensemble - start_genensemble) / 60.))
             
     def gen_df_ensemble(self, tracer='ELG', cached=False, sort=True, survey='SV1', dX2_lim=100., zlo=0.0013):
-        import pandas              as     pd
+        import pandas                        as     pd
 
-        from   astropy.table       import vstack, join
-        from   desispec.io.spectra import read_spectra
+        from   astropy.table                 import vstack, join
+        from   desispec.io.spectra           import read_spectra
         from   desitarget.sv1.sv1_targetmask import bgs_mask as sv1_bgs_mask
 
         
@@ -825,10 +852,7 @@ class RadLSS(object):
         vi_truthtable                  = '/global/cfs/cdirs/desi/sv/vi/TruthTables/truth_table_{}_v1.2.csv'.format(tracer)
 
         self.nmodel[tracer]            =  0
-        
-        self.df_ensemble_coadds        = {}
-        self.df_ensemble_zbests        = {}
-        
+                
         if cached and path.exists(self.ensemble_dir + '/deepfield-{}-ensemble-flux.fits'.format(tracer.lower())):
             try:
                 with open(self.ensemble_dir + '/deepfield-{}-ensemble-flux.fits'.format(tracer.lower()), 'rb') as handle:
@@ -1007,31 +1031,34 @@ class RadLSS(object):
         print('Rank {}:  Writing to {}.'.format(self.rank, self.ensemble_dir + '/deepfield-{}-ensemble-flux.fits'.format(tracer.lower())))        
         print('Rank {}:  Created deepfield ensemble of {} galaxies in {:.3f} mins.'.format(self.rank, self.nmodel[tracer], (end_deepfield - start_deepfield) / 60.))
 
-    def stack_ensemble(self, vet=True):
+    def stack_ensemble(self, vet=False):
         '''
         Stack the ensemble to an average.
         '''
         for tracer in self.ensemble_tracers:
             for band in ['b', 'r', 'z']:
-                self.ensemble_flux[tracer][band]  = np.sqrt(np.mean(self.ensemble_flux[tracer][band]**2.,  axis=0).reshape(1, len(self.ensemble_flux[tracer][band].T)))
                 self.ensemble_dflux[tracer][band] = np.sqrt(np.mean(self.ensemble_dflux[tracer][band]**2., axis=0).reshape(1, len(self.ensemble_dflux[tracer][band].T)))
+
+                self.ensemble_flux[tracer][band]  = None
                 self.ensemble_meta[tracer]        = None
 
             self.nmodel[tracer] = 1
 
         if vet:
             petals = list(self.df_ensemble_coadds.keys())
-            petal  = petals[0]
 
-            for band in ['b', 'r', 'z']:
-                pl.plot(self.df_ensemble_coadds[petal].wave[band], self.ensemble_dflux[tracer][band].T)
+            if len(petals) > 0:
+                petal  = petals[0]
+
+                for band in ['b', 'r', 'z']:
+                    pl.plot(self.df_ensemble_coadds[petal].wave[band], self.ensemble_dflux[tracer][band].T)
                         
-            pl.show()
+                pl.show()
             
     def calc_templatesnrs(self, tracer='ELG'):
         '''
         Calculate template SNRs for the ensemble. 
-
+        
         Calls generation of templates, which reads
         cache if possible. 
         
@@ -1062,19 +1089,25 @@ class RadLSS(object):
             
             for ifiber, fiberid in enumerate(self.fibermaps[cam]['FIBER']):
                 for j, template_dflux in enumerate(self.ensemble_dflux[tracer][band]):
+                    # Pipeline processed.
                     sky_flux            = self.skies[cam].flux[ifiber,:]
                     flux_calib          = self.fluxcalibs[cam].calib[ifiber,:]
                     flux_ivar           = self.cframes[cam].ivar[ifiber, :]
-                    fiberflat           = self.fiberflats[cam].fiberflat[ifiber,:] 
+                    fiberflat           = self.fiberflats[cam].fiberflat[ifiber,:]
+
+                    # 
                     readnoise           = self.cframes[cam].fibermap['RDNOISE'][ifiber]  
                     npix                = self.cframes[cam].fibermap['NEA'][ifiber]  
                     angstroms_per_pixel = self.cframes[cam].fibermap['ANGSTROMPERPIXEL'][ifiber]  
-                
+
+                    # TSNR with cframe IVAR
                     self.template_snrs[tracer][cam]['TSNR'][ifiber, j]           = dtemplateSNR(template_dflux, flux_ivar)
+
+                    # TSNR with ccd-model IVAR (derived from rdnoise, sky etc.).
                     self.template_snrs[tracer][cam]['TSNR_MODELIVAR'][ifiber, j] = dtemplateSNR_modelivar(template_dflux, sky_flux=sky_flux, flux_calib=flux_calib,
                                                                                                           fiberflat=fiberflat, readnoise=readnoise, npix=npix,
                                                                                                           angstroms_per_pixel=angstroms_per_pixel)
-
+        # 
         self.template_snrs[tracer]['brz'] = {}
             
         for cam in self.cameras:
@@ -1327,13 +1360,13 @@ class RadLSS(object):
                 
                 # -------------  Deep Field  ---------------
                 for tracer in tracers:
-                    self.gen_df_ensemble(tracer=tracer)
+                    # self.gen_df_ensemble(tracer=tracer, cached=True)
                     
-                    self.gen_template_ensemble(tracer=tracer, cached=False)
+                    self.gen_template_ensemble(tracer=tracer, cached=True)
+
+                    self.stack_ensemble()
                     
                     self.calc_templatesnrs(tracer=tracer)
-
-                self.stack_ensemble()
                     
                 # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 
                 self.write_radweights()
