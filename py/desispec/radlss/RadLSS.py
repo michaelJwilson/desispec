@@ -534,6 +534,7 @@ class RadLSS(object):
 
           hdu_list        = [primary] + [fits.ImageHDU(self.template_snrs[tracer]['brz{}'.format(petal)]['TSNR'], name=tracer) for tracer in self.ensemble_tracers]  
  
+
           all_hdus        = fits.HDUList(hdu_list)
 
           all_hdus.writeto(self.outdir + '/radweights-{}-{:08d}.fits'.format(petal, self.expid), overwrite=True)
