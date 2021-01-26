@@ -58,7 +58,7 @@ for nea in neas:
     axes[band].set_ylim(14., 19.)
 
     axes[band].set_xlabel(r'MJD $[10^4]$')
-    axes[band].set_ylabel(r'NEA [PIX]')
+    axes[band].set_ylabel(r'NEA [PIX dA]')
     
     axes[band].set_title('{:.3f} AA'.format(psfwave))
     
@@ -68,6 +68,6 @@ expids = 'EXPIDS\n' + '\n'.join(expids.astype(str))
 
 print(expids)
 
-axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top')
+axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top', fontsize=8.)
 
 pl.show()

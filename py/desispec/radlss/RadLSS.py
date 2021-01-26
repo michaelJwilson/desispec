@@ -334,6 +334,8 @@ class RadLSS(object):
     
             for ifiber, fiberid in enumerate(fiberids):
                 psf_2d       = psf.pix(ispec=ifiber, wavelength=psf_wave)
+
+                # Normalized to one by definition (TBC, again). 
                 # norm       = np.sum(psf_2d)
              
                 # http://articles.adsabs.harvard.edu/pdf/1983PASP...95..163K
@@ -589,7 +591,7 @@ class RadLSS(object):
 
         print('Rank {}:  Written rad. weights (and value added fibermap) to {} in {:.3f} mins.'.format(self.rank, self.outdir + '/radweights-?-{:08d}.fits'.format(self.expid), (end_writeweights - start_writeweights) / 60.))
           
-    def compute(self, tracers=['BGS'], ensemble_type='deepfield'):
+    def compute(self, tracers=['BGS'], ensemble_type='template'):
         #  Process only science exposures.
         if self.flavor == 'science':        
             if (not self.fail):

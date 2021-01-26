@@ -209,8 +209,11 @@ class df_ensemble(object):
             
         if vet:
             for band in ['b', 'r', 'z']:
-                pl.plot(fullwave[cslice[band]], self.ensemble_dflux_stack[band].T)
+                pl.plot(fullwave[cslice[band]], self.ensemble_dflux_stack[band].T, lw=0.2)
 
+            pl.title('{} deep-field ensemble'.format(self.tracer.upper()))
+            pl.xlabel(r'Wavelength $[\AA]$')
+            pl.ylabel(r'$\sqrt{< \Delta F^2 >} \ \ [10^{-17} {\rm ergs}/s/cm^2/\AA] $')
             pl.show()
         
 

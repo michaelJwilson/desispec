@@ -191,8 +191,11 @@ class template_ensemble(object):
             import pylab as pl
             
             for band in ['b', 'r', 'z']:
-                pl.plot(wave[cslice[band]], self.ensemble_dflux_stack[band].T)
+                pl.plot(wave[cslice[band]], self.ensemble_dflux_stack[band].T, lw=0.2)
 
+            pl.title('{} Sim. ensemble'.format(self.tracer.upper()))
+            pl.xlabel(r'Wavelength $[\AA]$')
+            pl.ylabel(r'$\sqrt{< \Delta F^2 >} \ \ [10^{-17} {\rm ergs}/s/cm^2/\AA] $')
             pl.show()
 
             
@@ -209,6 +212,6 @@ if __name__ == '__main__':
 
     # print(meta)
     
-    rads = template_ensemble(tracer='BGS', nmodel=nmodel, cached=False, sort=False, conditionals=None, tile=1)
+    rads = template_ensemble(tracer='BGS', nmodel=nmodel, cached=True, sort=False, conditionals=None, tile=1)
     rads.stack_ensemble()
 

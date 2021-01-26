@@ -68,6 +68,6 @@ expids = 'EXPIDS\n' + '\n'.join(expids.astype(str))
 
 print(expids)
 
-axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top')
+axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top', fontsize=8.)
 
 pl.show()

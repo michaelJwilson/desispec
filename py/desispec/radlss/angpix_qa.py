@@ -53,7 +53,7 @@ for nea in neas:
     shift = 0.01
 
     # 5 min. scatter, 1/3 of a percent. 
-    mjd   = mjd * (1. + np.random.uniform(-shift / 3., shift / 3.))
+    mjd   = mjd + (1. + np.random.uniform(-shift / 3., shift / 3.))
     
     axes[band].errorbar(mjd, mean, yerr=std, color=colors[petal], marker='^', markersize=4, alpha=0.5)
     # axes[band].set_ylim(14., 19.)
@@ -69,7 +69,7 @@ expids = 'EXPIDS\n' + '\n'.join(expids.astype(str))
 
 print(expids)
 
-axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top')
+axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top', fontsize=8.)
 
 plt.tight_layout()
 
