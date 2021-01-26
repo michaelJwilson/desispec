@@ -13,7 +13,7 @@ conds     = Table.read('sv1-exposures.fits')
 
 neas      = glob.glob('/global/cscratch1/sd/mjwilson/radlss/blanc/tiles/*/*/nea*.fits')
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+fig, axes = plt.subplots(3, 1, figsize=(15, 15))
 # plt.subplots_adjust(hspace=0.1)
 
 axes      = {'b': axes[0], 'r': axes[1], 'z': axes[2]}
@@ -47,18 +47,16 @@ for nea in neas:
     std   =  np.std(nea['ANGSTROMPERPIXEL'])
 
     mjd   = np.mean(nea['MJDOBS'])
-    mjd  /= 1.e4
 
     # 15 min. scatter
     shift = 0.01
 
     # 5 min. scatter, 1/3 of a percent. 
-    mjd   = mjd + (1. + np.random.uniform(-shift / 3., shift / 3.))
+    # mjd = mjd + (1. + np.random.uniform(-shift / 3., shift / 3.))
     
     axes[band].errorbar(mjd, mean, yerr=std, color=colors[petal], marker='^', markersize=4, alpha=0.5)
     # axes[band].set_ylim(14., 19.)
 
-    axes[band].set_xlabel(r'MJD $[10^4]$')
     axes[band].set_ylabel(r'ANGSTROM PER PIXEL')
     
     axes[band].set_title('{:.3f} AA'.format(psfwave))
@@ -69,8 +67,8 @@ expids = 'EXPIDS\n' + '\n'.join(expids.astype(str))
 
 print(expids)
 
-axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top', fontsize=8.)
+axes['z'].set_xlabel(r'MJD $[10^4]$')
+# axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top', fontsize=8.)
 
 plt.tight_layout()
-
 pl.show()

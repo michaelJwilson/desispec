@@ -573,7 +573,7 @@ class RadLSS(object):
 
           primary         = fits.PrimaryHDU(header=hdr)
 
-          hdu_list        = [primary] + [fits.ImageHDU(self.template_snrs[tracer]['brz{}'.format(petal)]['TSNR'], name=tracer) for tracer in self.ensemble_tracers]  
+          hdu_list        = [primary] + [fits.ImageHDU(self.template_snrs[tracer]['brz{}'.format(petal)]['TSNR_MODELIVAR'], name=tracer) for tracer in self.ensemble_tracers]  
  
 
           all_hdus        = fits.HDUList(hdu_list)

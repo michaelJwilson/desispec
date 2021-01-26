@@ -49,7 +49,7 @@ for rad in rads:
 
     # 5 min. scatter, 1/3 of a percent. 
     mjd   = mjd * (1. + np.random.uniform(-shift / 3., shift / 3.))
-
+    
     for band in ['B', 'R', 'Z']:
         # _EBVAIR
         dep  = conds['{}_DEPTH'.format(band)][conds['EXPID'] == expid]    
@@ -57,10 +57,10 @@ for rad in rads:
         axes[band.lower()].errorbar(dep, mean, yerr=std, marker='^', markersize=4, alpha=0.5)
         axes[band.lower()].set_xscale('log')
 
-        axes[band.lower()].set_xlabel('{}_DEPTH_EBVAIR'.format(band)) 
-        axes[band.lower()].set_ylabel(r'$\tau$SNR')
+        axes[band.lower()].set_xlabel('{}_DEPTH'.format(band)) 
+        axes[band.lower()].set_ylabel(r'$\tau$SNR$^2$')
         
-        # axes[band].set_ylim(14., 19.)
+        axes[band.lower()].set_ylim(-100., 4000.)
         # axes[band].set_xlabel(r'MJD $[10^4]$')
         # axes[band].set_ylabel(r'NEA [PIX]')
         # axes[band].set_title('{:.3f} AA'.format(psfwave))
@@ -71,7 +71,13 @@ expids = 'EXPIDS\n' + '\n'.join(expids.astype(str))
 
 print(expids)
 
-axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top', fontsize=8.)
+## axes['z'].text(1.1, 1.0, expids, transform=axes['z'].transAxes, verticalalignment='top', fontsize=8.)
 
+xs    = np.arange(0.0, 300.0)
+
+for band in ['B', 'R', 'Z']:
+    for a in np.arange(0.1, 1., 0.1):
+         axes[band.lower()].plot(xs, a * xs**2., c='k', lw=0.1)
+    
 plt.tight_layout()
 pl.show()

@@ -95,7 +95,7 @@ def is_processed(logfile):
     return  processed
 
 # Night to reduce.
-night     = '20201223'
+night     = '20201222'
 
 # Tracers to sample fiber variance. 
 tracers   = ['BGS']
