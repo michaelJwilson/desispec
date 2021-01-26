@@ -275,7 +275,7 @@ class RadLSS(object):
 
         print('Rank {}:  Retrieved GFA info. in {:.3f} mins.'.format(self.rank, (end_getgfa - start_getgfa) / 60.))
             
-    def calc_nea(self, psf_wave=None, write=False):
+    def calc_nea(self, psf_wave=None, write=True):
         '''
         Calculate the noise equivalent area for each fiber of a given camera from the local psf, at a representative OII wavelength.  
         Added to self.fibermaps[cam].
@@ -291,21 +291,24 @@ class RadLSS(object):
 
         '''
 
-        start_calcnea = time.perf_counter()
+        start_calcnea    = time.perf_counter()
         
         for cam in self.cameras:
-            psf = self.psfs[cam]
+            psf          = self.psfs[cam]
             
             # Note:  psf.nspec, psf.npix_x, psf.npix_y
-            if psf_wave is None:
+            if psf_wave is not None:
                 # Representative wavelength.
                 z_elg    = 1.1
                 psf_wave = 3727. * (1. + z_elg)    
-            
+
+            else:
+                psf_wave = np.median(self.cframes[cam].wave)
+                
             if (psf_wave < self.cframes[cam].wave.min()) | (psf_wave > self.cframes[cam].wave.max()):
                 psf_wave = np.median(self.cframes[cam].wave)
                
-            fiberids = self.fibermaps[cam]['FIBER']
+            fiberids     = self.fibermaps[cam]['FIBER']
                 
             #  Fiber centroid position on CCD.
             #  https://github.com/desihub/specter/blob/f242a3d707c4cba549030af6df8cf5bb12e2b47c/py/specter/psf/psf.py#L467
@@ -330,27 +333,29 @@ class RadLSS(object):
             angstrom_per_pix = []
     
             for ifiber, fiberid in enumerate(fiberids):
-                psf_2d = psf.pix(ispec=ifiber, wavelength=psf_wave)
-            
-                # norm = np.sum(psf_2d)
+                psf_2d       = psf.pix(ispec=ifiber, wavelength=psf_wave)
+                # norm       = np.sum(psf_2d)
              
                 # http://articles.adsabs.harvard.edu/pdf/1983PASP...95..163K
                 neas.append(1. / np.sum(psf_2d ** 2.))  # [pixel units].
-
                 angstrom_per_pix.append(psf.angstroms_per_pixel(ifiber, psf_wave))
 
             self.fibermaps[cam]['NEA']              = np.array(neas)
             self.fibermaps[cam]['ANGSTROMPERPIXEL'] = np.array(angstrom_per_pix)
             
             if write:
-                raise  NotImplementedError()
+                output = self.fibermaps[cam]['FIBER', 'NEA', 'ANGSTROMPERPIXEL']
+                output.meta = {'PSFWAVE': psf_wave}
+                output.write(self.outdir + 'nea_{}_{:08d}.fits'.format(cam, self.expid), overwrite=True)
 
+                print('Rank {}:  Written NEA to {}.'.format(self.rank, self.outdir + 'nea_{}_{:08d}.fits'.format(cam, self.expid)))
+                
         # End the clock.                                                                                                                                                                                      
         end_calcnea = time.perf_counter()
 
         print('Rank {}:  Calculated NEA in {:.3f} mins.'.format(self.rank, (end_calcnea - start_calcnea) / 60.))
         
-    def calc_readnoise(self, psf_wave=None):
+    def calc_readnoise(self, psf_wave=None, write=True):
         '''
         Calculate the readnoise for each fiber of a given camera from the patch matched to the local psf.
         Added to self.fibermaps[cam].
@@ -375,11 +380,14 @@ class RadLSS(object):
         for cam in self.cameras:
             self.ccdsizes[cam] = np.array(self.cframes[cam].meta['CCDSIZE'].split(',')).astype(np.int)
                                                     
-            if psf_wave is None:
+            if psf_wave is not None:
                 #  Representative wavelength.
                 z_elg      = 1.1
                 psf_wave   = 3727. * (1. + z_elg)    
-            
+
+            else:
+                psf_wave   = np.median(self.cframes[cam].wave)
+                
             if (psf_wave < self.cframes[cam].wave.min()) | (psf_wave > self.cframes[cam].wave.max()):
                 psf_wave   = np.median(self.cframes[cam].wave)
                
@@ -437,30 +445,45 @@ class RadLSS(object):
             self.fibermaps[cam]['QUAD']         = np.array(quads)
             self.fibermaps[cam]['RDNOISE_QUAD'] = np.array(rd_quad_noises)
 
+            if write:
+                output      = self.fibermaps[cam]['FIBER', 'CCDX', 'CCDY', 'QUAD', 'RDNOISE', 'RDNOISE_QUAD']
+                output.meta = {'PSFWAVE': psf_wave}
+                output.write(self.outdir + 'rdnoise_{}_{:08d}.fits'.format(cam, self.expid), overwrite=True)
+
+                print('Rank {}:  Written read noise to {}.'.format(self.rank, self.outdir + 'rdnoise_{}_{:08d}.fits'.format(cam, self.expid)))
+            
         end_calcread = time.perf_counter()
 
         print('Rank {}:  Calculated psf-local readnoise in {:.3f} mins.'.format(self.rank, (end_calcread - start_calcread) / 60.))
 
-    def grab_ensemble(self, ensemble_type='template', tracer='BGS'):
+    def grab_ensemble(self, ensemble_type='template', tracer='BGS', stack=True):
         assert  np.isin(ensemble_type, ['template', 'deepfield'])
-
-        print(self.ensemble_dir + '/{}-{}-ensemble-flux.fits'.format(ensemble_type, tracer.lower()))
         
         with open(self.ensemble_dir + '/{}-{}-ensemble-flux.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
-            self.ensemble_flux = pickle.load(handle)
+            self.ensemble_flux[tracer] = pickle.load(handle)
 
         with open(self.ensemble_dir + '/{}-{}-ensemble-dflux.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
-            self.ensemble_dflux = pickle.load(handle)
+            self.ensemble_dflux[tracer] = pickle.load(handle)
 
         with open(self.ensemble_dir + '/{}-{}-ensemble-meta.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
-            self.ensemble_meta = pickle.load(handle)
+            self.ensemble_meta[tracer] = pickle.load(handle)
             
         with open(self.ensemble_dir + '/{}-{}-ensemble-objmeta.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
-            self.ensemble_objmeta = pickle.load(handle)
+            self.ensemble_objmeta[tracer] = pickle.load(handle)
 
-        self.nmodel = len(self.ensemble_flux['b'])
+        self.nmodel[tracer] = len(self.ensemble_flux[tracer]['b'])
 
-        print('Successfully retrieved pre-written ensemble files at: {} (nmodel: {})'.format(self.ensemble_dir, self.nmodel))
+        if stack:
+            with open(self.ensemble_dir + '/{}-{}-ensemble-dflux-stack.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
+                self.ensemble_dflux[tracer] = pickle.load(handle)
+
+            self.nmodel[tracer] = 1
+
+            print('Rank {}:  Reducing {} stack.'.format(self.rank, tracer))
+
+        self.ensemble_tracers.append(tracer)
+            
+        print('Rank {}:  Successfully retrieved pre-written ensemble files at: {} (nmodel: {})'.format(self.rank, self.ensemble_dir + '/{}-{}-ensemble-flux.fits'.format(ensemble_type, tracer.lower()), self.nmodel[tracer]))
 
     def calc_templatesnrs(self, tracer='ELG'):
         '''
@@ -576,7 +599,7 @@ class RadLSS(object):
                 
                 for tracer in tracers:
                     self.grab_ensemble(ensemble_type, tracer=tracer)
-
+                    
                     self.calc_templatesnrs(tracer=tracer)
                     
                 # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 

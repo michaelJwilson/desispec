@@ -112,7 +112,6 @@ expids    = [69611]
 
 # One petal test set, e.g. ['b6', 'r6', 'z6'] or full: cameras=None.  
 # cameras = ['b6', 'r6', 'z6']
-
 cameras   = None
 
 comm.barrier()

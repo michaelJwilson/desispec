@@ -7,6 +7,7 @@ import desisim.templates
 
 from   astropy.convolution           import convolve, Box1DKernel
 from   pathlib                       import Path
+from   desiutil.dust                 import mwdust_transmission
 
 
 np.random.seed(seed=314)
@@ -43,7 +44,7 @@ class template_ensemble(object):
             else:
                 raise  ValueError('{} is not an available tracer.'.format(tracer))
 
-            flux, wave, meta, objmeta = maker.make_templates(nmodel=nmodel, trans_filter='decam2014-r', redshift=redshifts, mag=mags, south=True)
+            flux, wave, meta, objmeta = maker.make_templates(nmodel=nmodel, trans_filter='decam2014-r', redshift=redshifts, mag=mags, south=True, zrange=(0.01, 0.4), magrange=(19.5, 20.0))
 
             return  wave, flux, meta, objmeta
 
@@ -96,7 +97,9 @@ class template_ensemble(object):
             
         else:
             conditional_redshifts      = conditionals['REDSHIFT'].data
-            conditional_mags           = conditionals['FLUX_R'].data
+
+            mw_trans                   = mwdust_transmission(conditionals['EBV'], 'R', conditionals['PHOTSYS'])                                                                                                                         
+            conditional_mags           = 22.5 - 2.5 * np.log10(conditionals['FLUX_R'].data / mw_trans)                                                                                                                      
 
             print('Assuming {} conditional redshifts and magnitudes for ensemble (tiling factor: {:d}).'.format(len(conditional_redshifts), tile))
 
@@ -107,10 +110,11 @@ class template_ensemble(object):
                 conditional_redshifts += np.random.normal(loc=0.0, scale=0.02, size=len(conditional_redshifts))
                 # conditional_mags    += np.random.normal(loc=0.0, scale=0.05, size=len(conditional_mags))
 
-                conditional_mags       = conditional_mags[conditional_redshifts > 0.0]
-                conditional_redshifts  = conditional_redshifts[conditional_redshifts > 0.0]
+            # 
+            conditional_mags           = conditional_mags[conditional_redshifts > 0.0]
+            conditional_redshifts      = conditional_redshifts[conditional_redshifts > 0.0]
 
-                nmodel                 = len(conditional_redshifts)
+            nmodel                     = len(conditional_redshifts)
                 
             # Check:  assumes DECAM-R as standard.
             _, flux, meta, objmeta     = tracer_maker(wave, tracer=tracer, nmodel=nmodel, redshifts=conditional_redshifts, mags=conditional_mags)
@@ -180,18 +184,25 @@ class template_ensemble(object):
         if vet:
             import pylab as pl
             
-
             for band in ['b', 'r', 'z']:
                 pl.plot(wave[cslice[band]], self.ensemble_dflux_stack[band].T)
 
             pl.show()
 
+            
 if __name__ == '__main__':
-    mpath = '/global/cscratch1/sd/mjwilson/radlss/blanc/ensemble/template-bgs-ensemble-meta.fits'
+    nmodel          = 500
+    
+    mpath           = '/global/cscratch1/sd/mjwilson/radlss/blanc/ensemble/deepfield-bgs-ensemble-meta.fits'
     
     with open(mpath, 'rb') as handle: 
         meta = pickle.load(handle)
-        
-    #
-    rads = template_ensemble(tracer='BGS', nmodel=5000, cached=True, sort=False, conditionals=meta, tile=1)
+
+    meta            = meta[:nmodel]
+    meta['PHOTSYS'] = meta['PHOTSYS'].astype(str)
+
+    # print(meta)
+    
+    rads = template_ensemble(tracer='ELG', nmodel=nmodel, cached=False, sort=False, conditionals=None, tile=1)
     rads.stack_ensemble()
+

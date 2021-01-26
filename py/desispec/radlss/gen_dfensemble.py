@@ -158,11 +158,6 @@ class df_ensemble(object):
                 dflux[i,:] = ff - sflux
 
             self.ensemble_dflux[band] = dflux
-        '''
-        for band in ['G', 'R', 'Z']:
-            trans = mwdust_transmission(self.ensemble_meta['EBV'], band, self.ensemble_meta['PHOTSYS'])
-            self.ensemble_meta['MAG_{}'.format(band)] = 22.5 - 2.5 * np.log10(self.ensemble_meta['FLUX_{}'.format(band)])
-        '''
 
         self.ensemble_objmeta['OIIFLUX']  = np.zeros(len(self.ensemble_meta))
 
@@ -209,6 +204,9 @@ class df_ensemble(object):
         for band in ['b', 'r', 'z']:
             self.ensemble_dflux_stack[band] = np.sqrt(np.mean(self.ensemble_dflux[band]**2., axis=0).reshape(1, len(self.ensemble_dflux[band].T)))
 
+        with open(self.ensemble_dir + '/deepfield-{}-ensemble-dflux-stack.fits'.format(self.tracer.lower()), 'wb') as handle:
+            pickle.dump(self.ensemble_dflux_stack, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            
         if vet:
             for band in ['b', 'r', 'z']:
                 pl.plot(fullwave[cslice[band]], self.ensemble_dflux_stack[band].T)
