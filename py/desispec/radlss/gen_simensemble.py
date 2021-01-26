@@ -49,7 +49,8 @@ class template_ensemble(object):
             return  wave, flux, meta, objmeta
 
         start_genensemble  = time.perf_counter()
-        
+
+        self.tracer        = tracer
         self.ensemble_type = 'desisim'
 
         # Strip e.g. blanc from prod. path.                                                                                                                                                                                                   
@@ -181,6 +182,11 @@ class template_ensemble(object):
         for band in ['b', 'r', 'z']:
             self.ensemble_dflux_stack[band] = np.sqrt(np.mean(self.ensemble_dflux[band]**2., axis=0).reshape(1, len(self.ensemble_dflux[band].T)))
 
+        with open(self.ensemble_dir + '/template-{}-ensemble-dflux-stack.fits'.format(self.tracer.lower()), 'wb') as handle:
+            pickle.dump(self.ensemble_dflux_stack, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        print('Written stack to {}'.format(self.ensemble_dir + '/template-{}-ensemble-dflux-stack.fits'.format(self.tracer.lower())))
+            
         if vet:
             import pylab as pl
             
@@ -191,7 +197,7 @@ class template_ensemble(object):
 
             
 if __name__ == '__main__':
-    nmodel          = 500
+    nmodel          = 24000
     
     mpath           = '/global/cscratch1/sd/mjwilson/radlss/blanc/ensemble/deepfield-bgs-ensemble-meta.fits'
     
@@ -203,6 +209,6 @@ if __name__ == '__main__':
 
     # print(meta)
     
-    rads = template_ensemble(tracer='ELG', nmodel=nmodel, cached=False, sort=False, conditionals=None, tile=1)
+    rads = template_ensemble(tracer='BGS', nmodel=nmodel, cached=False, sort=False, conditionals=None, tile=1)
     rads.stack_ensemble()
 

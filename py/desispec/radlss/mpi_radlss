@@ -101,14 +101,13 @@ night     = '20201223'
 tracers   = ['BGS']
 
 #
-overwrite = True
-
+overwrite = False
 
 # ------------------------------ #
 expids, tiles = get_expids(night)
 
 # Test set. 
-expids    = [69611]
+# expids  = [69611]
 
 # One petal test set, e.g. ['b6', 'r6', 'z6'] or full: cameras=None.  
 # cameras = ['b6', 'r6', 'z6']
