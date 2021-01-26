@@ -60,9 +60,7 @@ class template_ensemble(object):
         # If already available, load.                                                                                                                                                                                                         
         # TODO:  Simplify to one fits with headers?                                                                                                                                                                                           
         if (conditionals is None) & cached:
-            try:
-                
-                
+            try:                
                 with open(self.ensemble_dir + '/template-{}-ensemble-flux.fits'.format(tracer.lower()), 'rb') as handle:
                     self.ensemble_flux = pickle.load(handle)
 

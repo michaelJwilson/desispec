@@ -64,8 +64,8 @@ from   RadLSS                    import  RadLSS
 from   desispec.parallel         import  stdouterr_redirected
 
 
-prod = '/global/cfs/cdirs/desi/spectro/redux/blanc'
-odir = '/global/cscratch1/sd/mjwilson/radlss/test/'
+prod = '/global/cfs/cdirs/desi/spectro/redux/blanc/'
+odir = '/global/cscratch1/sd/mjwilson/radlss/blanc/'
 
 def get_expids(night, prod=prod):
     '''
@@ -150,7 +150,7 @@ if len(rankexp) > 0:
             Path(logdir).mkdir(parents=True, exist_ok=True)
 
             print('Rank {}:  Writing log for {:08d} to {}.'.format(rank, expid, logfile))
-      
+            
             with stdouterr_redirected(to=logfile):
                 print('Rank {}: Solving for EXPID {:08d} ({} of {})'.format(rank, expid, nexp, len(rankexp)))
         

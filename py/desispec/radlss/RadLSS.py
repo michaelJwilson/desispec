@@ -94,9 +94,7 @@ class RadLSS(object):
         self.ensemble_meta    = {}
         self.ensemble_objmeta = {}
         self.template_snrs    = {}
-        
-        self.df_ensemble_zbests   = None
-        
+                
         # Establish if cframes exist & science exposure, from header info.  
         self.get_data(shallow=True)
             
@@ -443,6 +441,27 @@ class RadLSS(object):
 
         print('Rank {}:  Calculated psf-local readnoise in {:.3f} mins.'.format(self.rank, (end_calcread - start_calcread) / 60.))
 
+    def grab_ensemble(self, ensemble_type='template', tracer='BGS'):
+        assert  np.isin(ensemble_type, ['template', 'deepfield'])
+
+        print(self.ensemble_dir + '/{}-{}-ensemble-flux.fits'.format(ensemble_type, tracer.lower()))
+        
+        with open(self.ensemble_dir + '/{}-{}-ensemble-flux.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
+            self.ensemble_flux = pickle.load(handle)
+
+        with open(self.ensemble_dir + '/{}-{}-ensemble-dflux.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
+            self.ensemble_dflux = pickle.load(handle)
+
+        with open(self.ensemble_dir + '/{}-{}-ensemble-meta.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
+            self.ensemble_meta = pickle.load(handle)
+            
+        with open(self.ensemble_dir + '/{}-{}-ensemble-objmeta.fits'.format(ensemble_type, tracer.lower()), 'rb') as handle:
+            self.ensemble_objmeta = pickle.load(handle)
+
+        self.nmodel = len(self.ensemble_flux['b'])
+
+        print('Successfully retrieved pre-written ensemble files at: {} (nmodel: {})'.format(self.ensemble_dir, self.nmodel))
+
     def calc_templatesnrs(self, tracer='ELG'):
         '''
         Calculate template SNRs for the ensemble. 
@@ -457,9 +476,6 @@ class RadLSS(object):
 
         start_templatesnr           = time.perf_counter()
 
-        if len(self.ensemble_flux.keys()) == 0:
-            self.gen_template_ensemble(tracer=tracer)
-        
         self.template_snrs[tracer]  = {}
         
         for cam in self.cameras:  
@@ -550,28 +566,21 @@ class RadLSS(object):
 
         print('Rank {}:  Written rad. weights (and value added fibermap) to {} in {:.3f} mins.'.format(self.rank, self.outdir + '/radweights-?-{:08d}.fits'.format(self.expid), (end_writeweights - start_writeweights) / 60.))
           
-    def compute(self, tracers=['ELG']):
+    def compute(self, tracers=['BGS'], ensemble_type='deepfield'):
         #  Process only science exposures.
         if self.flavor == 'science':        
             if (not self.fail):
                 self.calc_nea()
              
                 self.calc_readnoise()
-                                
-                # self.calc_fiberlosses()
                 
-                # -------------  Deep Field  ---------------
                 for tracer in tracers:
-                    # self.gen_df_ensemble(tracer=tracer, cached=True)
-                    
-                    self.gen_template_ensemble(tracer=tracer, cached=True)
+                    self.grab_ensemble(ensemble_type, tracer=tracer)
 
-                    self.stack_ensemble()
-                    
                     self.calc_templatesnrs(tracer=tracer)
                     
                 # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 
                 self.write_radweights()
-                    
+                
             else:
                 print('Skipping non-science exposure: {:08d}'.format(self.expid))
