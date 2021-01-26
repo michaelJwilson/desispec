@@ -212,6 +212,6 @@ if __name__ == '__main__':
 
     # print(meta)
     
-    rads = template_ensemble(tracer='BGS', nmodel=nmodel, cached=True, sort=False, conditionals=None, tile=1)
+    rads = template_ensemble(tracer='LRG', nmodel=nmodel, cached=True, sort=False, conditionals=None, tile=1)
     rads.stack_ensemble()
 

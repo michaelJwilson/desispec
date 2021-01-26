@@ -266,7 +266,7 @@ class RadLSS(object):
             self.gfa_median = Table.read(cgfa_path)
             
         self.gfa_median_exposure                = self.gfa_median[self.gfa_median['SPECTRO_EXPID'] == self.expid]
-        self.fiberloss                          = self.gfa_median_exposure['FIBER_FRACFLUX'][0]
+        # self.fiberloss                        = self.gfa_median_exposure['FIBER_FRACFLUX'][0]
 
         if printit:
             print(self.gfa_median)
@@ -275,7 +275,7 @@ class RadLSS(object):
 
         print('Rank {}:  Retrieved GFA info. in {:.3f} mins.'.format(self.rank, (end_getgfa - start_getgfa) / 60.))
             
-    def calc_nea(self, psf_wave=None, write=True):
+    def calc_nea(self, psf_wave=None, write=False):
         '''
         Calculate the noise equivalent area for each fiber of a given camera from the local psf, at a representative OII wavelength.  
         Added to self.fibermaps[cam].
@@ -312,32 +312,37 @@ class RadLSS(object):
                 
             #  Fiber centroid position on CCD.
             #  https://github.com/desihub/specter/blob/f242a3d707c4cba549030af6df8cf5bb12e2b47c/py/specter/psf/psf.py#L467
-            #  x,y = psf.xy(fiberids, self.psf_wave)
+            #  x,y = psf.xy(ifiber, psf_wave)
             
             #  https://github.com/desihub/specter/blob/f242a3d707c4cba549030af6df8cf5bb12e2b47c/py/specter/psf/psf.py#L300
             #  Range that boxes in fiber 'trace':  (xmin, xmax, ymin, ymax)
-            #  ranges = psf.xyrange(fiberids, self.psf_wave)
+            #  ranges = psf.xyrange(ifiber, psf_wave)
             
             #  Note:  Expectation of ** 3.44 ** for PSF size in pixel units (spectro paper).
             #  Return Gaussian sigma of PSF spot in cross-dispersion direction in CCD pixel units.
             #  Gaussian PSF, radius R that maximizes S/N for a faint source in the sky-limited case is 1.7σ
             #  http://www.ucolick.org/~bolte/AY257/s_n.pdf
-            #  2. * 1.7 * psf.xsigma(ispec=fiberid, wavelength=oii)
+            #  2. * 1.7 * psf.xsigma(ispec=ifiber, wavelength=psf_wave)
             
             #  Gaussian sigma of PSF spot in dispersion direction in CCD pixel units.
-            #  Gaussian PSF, radius R that maximizes S/N for a faint source in the sky-limited case is 1.7σ
-            #  http://www.ucolick.org/~bolte/AY257/s_n.pdf
-            #  2. * 1.7 * psf.ysigma(ispec=fiberid, wavelength=oii)
-           
+            #  2. * 1.7 * psf.ysigma(ispec=fiberid, wavelength=psf_wave)
+
+            #  Gaussian sigma of PSF spot in dispersion direction in Angstroms.
+            #  pix.wdisp(ifiber, wavelength=psf_wave)
+            
             neas             = []
             angstrom_per_pix = []
     
             for ifiber, fiberid in enumerate(fiberids):
                 psf_2d       = psf.pix(ispec=ifiber, wavelength=psf_wave)
 
-                # Normalized to one by definition (TBC, again). 
-                # norm       = np.sum(psf_2d)
-             
+                # Normalized to one by definition (TBC, again).
+                # dA = 1.0 [pixel units]
+                norm         = np.sum(psf_2d)
+
+                # Automatically raises an assertion. 
+                np.testing.assert_almost_equal(norm, 1.0, decimal=7)
+                
                 # http://articles.adsabs.harvard.edu/pdf/1983PASP...95..163K
                 neas.append(1. / np.sum(psf_2d ** 2.))  # [pixel units].
                 angstrom_per_pix.append(psf.angstroms_per_pixel(ifiber, psf_wave))
@@ -357,7 +362,7 @@ class RadLSS(object):
 
         print('Rank {}:  Calculated NEA in {:.3f} mins.'.format(self.rank, (end_calcnea - start_calcnea) / 60.))
         
-    def calc_readnoise(self, psf_wave=None, write=True):
+    def calc_readnoise(self, psf_wave=None, write=False):
         '''
         Calculate the readnoise for each fiber of a given camera from the patch matched to the local psf.
         Added to self.fibermaps[cam].
@@ -598,14 +603,14 @@ class RadLSS(object):
                 self.calc_nea()
              
                 self.calc_readnoise()
-                
+                '''
                 for tracer in tracers:
                     self.grab_ensemble(ensemble_type, tracer=tracer)
                     
                     self.calc_templatesnrs(tracer=tracer)
-                    
+                 
                 # tSNRs & derived fibermap info., e.g. NEA, RDNOISE, etc ... 
                 self.write_radweights()
-                
+                '''
             else:
                 print('Skipping non-science exposure: {:08d}'.format(self.expid))

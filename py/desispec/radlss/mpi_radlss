@@ -16,7 +16,6 @@ import multiprocessing
 
 from   mpi4py                    import  MPI
 
-
 nproc = multiprocessing.cpu_count() // 2
 
 comm  = MPI.COMM_WORLD
@@ -36,30 +35,14 @@ import warnings
 import numpy as np
 import pylab as pl
 
+import desispec.io
 import desisim.templates
 import astropy.io.fits           as      fits
-
-import desispec.io
-import redrock.templates
 import matplotlib.pyplot         as      plt
 
 from   os                        import  path
-from   astropy.convolution       import  convolve, Box1DKernel
-from   desispec.spectra          import  Spectra
-from   desispec.frame            import  Frame
-from   desispec.resolution       import  Resolution
-from   desispec.io.meta          import  findfile
-from   desispec.io               import  read_frame, read_fiberflat, read_flux_calibration, read_sky, read_fibermap 
-from   desispec.interpolation    import  resample_flux
 from   astropy.table             import  Table
-from   desispec.io.image         import  read_image
-from   specter.psf.gausshermite  import  GaussHermitePSF
-from   scipy.signal              import  medfilt
-from   desispec.calibfinder      import  CalibFinder
-from   astropy.utils.exceptions  import  AstropyWarning
-from   scipy                     import  stats
 from   pathlib                   import  Path
-from   templateSNR               import	 templateSNR
 from   RadLSS                    import  RadLSS
 from   desispec.parallel         import  stdouterr_redirected
 
@@ -95,23 +78,23 @@ def is_processed(logfile):
     return  processed
 
 # Night to reduce.
-night     = '20201222'
+night     = '20201223'
 
 # Tracers to sample fiber variance. 
 tracers   = ['BGS']
 
 #
-overwrite = False
+overwrite = True
 
 # ------------------------------ #
 expids, tiles = get_expids(night)
 
 # Test set. 
-# expids  = [69611]
+expids    = [69611]
 
 # One petal test set, e.g. ['b6', 'r6', 'z6'] or full: cameras=None.  
-# cameras = ['b6', 'r6', 'z6']
-cameras   = None
+cameras   = ['b6', 'r6', 'z6']
+# cameras = None
 
 comm.barrier()
 
@@ -148,7 +131,7 @@ if len(rankexp) > 0:
             Path(logdir).mkdir(parents=True, exist_ok=True)
 
             print('Rank {}:  Writing log for {:08d} to {}.'.format(rank, expid, logfile))
-            
+
             with stdouterr_redirected(to=logfile):
                 print('Rank {}: Solving for EXPID {:08d} ({} of {})'.format(rank, expid, nexp, len(rankexp)))
         
